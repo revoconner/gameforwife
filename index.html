@@ -2,32 +2,42 @@
 <html>
 <head>
     <title>Grid Block Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         canvas {
             border: 1px solid #000;
-            margin: 20px auto;
+            margin: 10px auto;
             display: block;
+            touch-action: none;
         }
         body {
             background-color: #f0f0f0;
             margin: 0;
+            padding: 0;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            overscroll-behavior: none;
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <script>
-        // Constants
-        const GRID_SIZE = 10;
-        const CELL_SIZE = 50;
-        const MARGIN = 2;
-        const SHAPE_CELL_SIZE = 30;
-        const SHAPE_MARGIN = 2;
-        const SCORE_AREA_HEIGHT = 60; // Height for score display area
+        // Constants and variables
+        const BASE_GRID_SIZE = 10;
+        const GRID_SIZE = BASE_GRID_SIZE;
+        let CELL_SIZE = 50;
+        let MARGIN = 2;
+        let SHAPE_CELL_SIZE = 30;
+        let SHAPE_MARGIN = 2;
+        let SCORE_AREA_HEIGHT = 60;
+        let CANVAS_WIDTH;
+        let CANVAS_HEIGHT;
+        let GRID_PIXELS;
+        let mouseX = 0;
+        let mouseY = 0;
 
         // Colors
         const WHITE = '#FFFFFF';
@@ -39,18 +49,45 @@
         const GREEN = '#64FF64';
         const PURPLE = '#C864FF';
 
-        // Calculate canvas dimensions
-        const GRID_PIXELS = GRID_SIZE * (CELL_SIZE + MARGIN) + MARGIN;
-        const CANVAS_WIDTH = GRID_PIXELS;
-        const CANVAS_HEIGHT = SCORE_AREA_HEIGHT + GRID_PIXELS + 200; // Score area + grid + shapes area
-
         // Setup canvas
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = CANVAS_WIDTH;
-        canvas.height = CANVAS_HEIGHT;
 
-        // Define shape patterns
+        // Scale factors based on screen size
+        function calculateScaling() {
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const smallerDimension = Math.min(screenWidth, screenHeight);
+            
+            // Scale everything based on screen size
+            const scaleFactor = smallerDimension / 600;
+            CELL_SIZE = Math.floor(50 * scaleFactor);
+            MARGIN = Math.max(2, Math.floor(2 * scaleFactor));
+            SHAPE_CELL_SIZE = Math.floor(30 * scaleFactor);
+            SHAPE_MARGIN = Math.max(2, Math.floor(2 * scaleFactor));
+            SCORE_AREA_HEIGHT = Math.floor(100 * scaleFactor);
+            
+            // Recalculate canvas dimensions
+            GRID_PIXELS = GRID_SIZE * (CELL_SIZE + MARGIN) + MARGIN;
+            CANVAS_WIDTH = GRID_PIXELS;
+            CANVAS_HEIGHT = SCORE_AREA_HEIGHT + GRID_PIXELS + (200 * scaleFactor);
+            
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+        }
+
+        // Calculate initial scaling
+        calculateScaling();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            calculateScaling();
+            if (game) {
+                game.draw();
+            }
+        });
+
+        // Shape patterns
         const SHAPE_PATTERNS = [
             // Single cell
             [[false, false, false],
@@ -308,15 +345,21 @@
                 ctx.fillStyle = WHITE;
                 ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                // Draw scores
-                ctx.font = '36px Arial';
-                ctx.textAlign = 'left';
-                ctx.fillStyle = BLUE;
-                ctx.fillText(`Score: ${this.score}`, 20, SCORE_AREA_HEIGHT/2 + 12);
+                // Calculate font size based on canvas width
+                const fontSize = Math.min(36, Math.floor(CANVAS_WIDTH / 15));
+                ctx.font = `${fontSize}px Arial`;
+
+                // Draw scores with adjusted positioning
+                const scoreY = SCORE_AREA_HEIGHT/2 + fontSize/3;
                 
-                ctx.textAlign = 'right';
+                // Draw Score on top
+                ctx.textAlign = 'center';
+                ctx.fillStyle = BLUE;
+                ctx.fillText(`Score: ${this.score}`, CANVAS_WIDTH/2, scoreY - fontSize/2);
+                
+                // Draw High Score below
                 ctx.fillStyle = PURPLE;
-                ctx.fillText(`High Score: ${this.highScore}`, CANVAS_WIDTH - 20, SCORE_AREA_HEIGHT/2 + 12);
+                ctx.fillText(`High Score: ${this.highScore}`, CANVAS_WIDTH/2, scoreY + fontSize/2);
                 
                 // Draw grid
                 for (let y = 0; y < GRID_SIZE; y++) {
@@ -403,21 +446,29 @@
             }
         }
 
-        // Game setup and mouse handling
-        let game = new Game();
-        let mouseX = 0;
-        let mouseY = 0;
+        // Event handling for both mouse and touch
+        let activePointer = null;
 
-        canvas.addEventListener('mousedown', (e) => {
+        function getCanvasCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+            const clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function handleStart(e) {
+            e.preventDefault();
             if (game.gameOver) return;
             
-            const rect = canvas.getBoundingClientRect();
-            mouseX = e.clientX - rect.left;
-            mouseY = e.clientY - rect.top;
+            const coords = getCanvasCoordinates(e);
+            mouseX = coords.x;
+            mouseY = coords.y;
             
             const shapeStartY = GRID_PIXELS + SCORE_AREA_HEIGHT + 50;
             
-            // Check if clicked on a shape
             game.shapes.forEach((shape, i) => {
                 if (!shape.dragging) {
                     const shapeX = i * (3 * (SHAPE_CELL_SIZE + SHAPE_MARGIN) + 50) + 50;
@@ -431,18 +482,34 @@
                         shape.dragging = true;
                         shape.offset_x = mouseX - shapeX;
                         shape.offset_y = mouseY - shapeY;
+                        activePointer = e.touches ? e.touches[0].identifier : 'mouse';
                     }
                 }
             });
-        });
+        }
 
-        canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            mouseX = e.clientX - rect.left;
-            mouseY = e.clientY - rect.top;
-        });
+        function handleMove(e) {
+            e.preventDefault();
+            if (!activePointer) return;
+            
+            // Check if this is the same touch that started the drag
+            if (e.touches && e.touches.length > 0) {
+                // Find the touch with the matching identifier
+                const touch = Array.from(e.touches).find(t => t.identifier === activePointer);
+                if (!touch) return;
+                
+                const rect = canvas.getBoundingClientRect();
+                mouseX = touch.clientX - rect.left;
+                mouseY = touch.clientY - rect.top;
+            } else {
+                const coords = getCanvasCoordinates(e);
+                mouseX = coords.x;
+                mouseY = coords.y;
+            }
+        }
 
-        canvas.addEventListener('mouseup', (e) => {
+        function handleEnd(e) {
+            e.preventDefault();
             if (game.gameOver) return;
             
             game.shapes.forEach(shape => {
@@ -456,7 +523,20 @@
                     shape.dragging = false;
                 }
             });
-        });
+            
+            activePointer = null;
+        }
+
+        // Add both mouse and touch event listeners
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('mouseleave', handleEnd);
+
+        canvas.addEventListener('touchstart', handleStart, { passive: false });
+        canvas.addEventListener('touchmove', handleMove, { passive: false });
+        canvas.addEventListener('touchend', handleEnd);
+        canvas.addEventListener('touchcancel', handleEnd);
 
         // Game loop
         function gameLoop() {
@@ -465,6 +545,7 @@
         }
 
         // Start the game
+        let game = new Game();
         gameLoop();
     </script>
 </body>
