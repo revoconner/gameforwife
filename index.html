@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Grid Block Game</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+            margin: 20px auto;
+            display: block;
+        }
+        body {
+            background-color: #f0f0f0;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        // Constants
+        const GRID_SIZE = 10;
+        const CELL_SIZE = 50;
+        const MARGIN = 2;
+        const SHAPE_CELL_SIZE = 30;
+        const SHAPE_MARGIN = 2;
+        const SCORE_AREA_HEIGHT = 60; // Height for score display area
+
+        // Colors
+        const WHITE = '#FFFFFF';
+        const BLACK = '#000000';
+        const GRAY = '#808080';
+        const BLUE = '#0064FF';
+        const LIGHT_BLUE = '#64C8FF';
+        const RED = '#FF6464';
+        const GREEN = '#64FF64';
+        const PURPLE = '#C864FF';
+
+        // Calculate canvas dimensions
+        const GRID_PIXELS = GRID_SIZE * (CELL_SIZE + MARGIN) + MARGIN;
+        const CANVAS_WIDTH = GRID_PIXELS;
+        const CANVAS_HEIGHT = SCORE_AREA_HEIGHT + GRID_PIXELS + 200; // Score area + grid + shapes area
+
+        // Setup canvas
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        // Define shape patterns
+        const SHAPE_PATTERNS = [
+            // Single cell
+            [[false, false, false],
+             [false, true, false],
+             [false, false, false]],
+            
+            // 3x3 solid block
+            [[true, true, true],
+             [true, true, true],
+             [true, true, true]],
+             
+            // L shape
+            [[true, false, false],
+             [true, false, false],
+             [true, true, true]],
+             
+            // Modified L shape
+            [[true, false, false],
+             [true, true, false],
+             [true, false, false]],
+             
+            // Right edge
+            [[false, false, false],
+             [true, true, false],
+             [false, false, false]],
+             
+            // Diagonal 2
+            [[true, true, false],
+             [false, true, true],
+             [false, false, false]],
+             
+            // Corner shape
+            [[false, false, false],
+             [true, false, false],
+             [true, true, false]],
+             
+            // Middle horizontal line
+            [[false, false, false],
+             [true, true, true],
+             [false, false, false]],
+             
+            // T shape
+            [[true, true, false],
+             [true, true, true],
+             [false, false, false]]
+        ];
+
+        class Shape {
+            constructor(pattern) {
+                this.pattern = pattern;
+                this.dragging = false;
+                this.offset_x = 0;
+                this.offset_y = 0;
+            }
+
+            rotate() {
+                const size = this.pattern.length;
+                const rotated = Array(size).fill().map(() => Array(size).fill(false));
+                for (let i = 0; i < size; i++) {
+                    for (let j = 0; j < size; j++) {
+                        rotated[j][size-1-i] = this.pattern[i][j];
+                    }
+                }
+                this.pattern = rotated;
+            }
+        }
+
+        class Game {
+            constructor() {
+                this.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
+                this.shapes = [];
+                this.score = 0;
+                this.highScore = this.loadHighScore();
+                this.scoreAnimation = null;
+                this.scoreAnimationTime = 0;
+                this.gameOver = false;
+                this.generateShapes();
+            }
+
+            loadHighScore() {
+                const stored = localStorage.getItem('highScore');
+                return stored ? parseInt(stored) : 0;
+            }
+
+            saveHighScore() {
+                localStorage.setItem('highScore', this.highScore.toString());
+            }
+
+            normalizeShapePosition(shape, gridX, gridY) {
+                let minX = Infinity;
+                let minY = Infinity;
+                for (let y = 0; y < shape.pattern.length; y++) {
+                    for (let x = 0; x < shape.pattern[y].length; x++) {
+                        if (shape.pattern[y][x]) {
+                            minX = Math.min(minX, x);
+                            minY = Math.min(minY, y);
+                        }
+                    }
+                }
+                return [gridX - minX, gridY - minY];
+            }
+
+            isGameOver() {
+                const canPlaceAtPosition = (shape, x, y) => {
+                    const pattern = shape.pattern;
+                    for (let py = 0; py < pattern.length; py++) {
+                        for (let px = 0; px < pattern[py].length; px++) {
+                            if (pattern[py][px]) {
+                                const newX = x + px;
+                                const newY = y + py;
+                                if (newX < 0 || newY < 0 || 
+                                    newX >= GRID_SIZE || newY >= GRID_SIZE ||
+                                    this.grid[newY][newX]) {
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                };
+
+                for (const shape of this.shapes) {
+                    let canPlace = false;
+                    for (let y = 0; y < GRID_SIZE; y++) {
+                        for (let x = 0; x < GRID_SIZE; x++) {
+                            if (canPlaceAtPosition(shape, x, y)) {
+                                canPlace = true;
+                                break;
+                            }
+                        }
+                        if (canPlace) break;
+                    }
+                    if (!canPlace) return true;
+                }
+                return false;
+            }
+
+            canPlaceShape(shape, gridX, gridY) {
+                [gridX, gridY] = this.normalizeShapePosition(shape, gridX, gridY);
+                
+                const pattern = shape.pattern;
+                for (let y = 0; y < pattern.length; y++) {
+                    for (let x = 0; x < pattern[y].length; x++) {
+                        if (pattern[y][x]) {
+                            const newX = gridX + x;
+                            const newY = gridY + y;
+                            if (newX < 0 || newY < 0 || 
+                                newX >= GRID_SIZE || newY >= GRID_SIZE ||
+                                this.grid[newY][newX]) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+
+            generateShapes() {
+                this.shapes = [];
+                const weightedIndices = [0, 1]
+                    .concat(...Array(4).fill().map(() => 
+                        Array.from({length: SHAPE_PATTERNS.length - 2}, (_, i) => i + 2)));
+                
+                for (let i = 0; i < 3; i++) {
+                    const patternIdx = weightedIndices[Math.floor(Math.random() * weightedIndices.length)];
+                    const pattern = SHAPE_PATTERNS[patternIdx].map(row => [...row]);
+                    const shape = new Shape(pattern);
+                    if (patternIdx > 1) {
+                        const rotations = Math.floor(Math.random() * 4);
+                        for (let j = 0; j < rotations; j++) {
+                            shape.rotate();
+                        }
+                    }
+                    this.shapes.push(shape);
+                }
+                
+                if (this.isGameOver()) {
+                    this.gameOver = true;
+                }
+            }
+
+            placeShape(shape, gridX, gridY) {
+                [gridX, gridY] = this.normalizeShapePosition(shape, gridX, gridY);
+                
+                const pattern = shape.pattern;
+                for (let y = 0; y < pattern.length; y++) {
+                    for (let x = 0; x < pattern[y].length; x++) {
+                        if (pattern[y][x]) {
+                            this.grid[gridY + y][gridX + x] = true;
+                        }
+                    }
+                }
+                
+                this.checkLines();
+                this.shapes.splice(this.shapes.indexOf(shape), 1);
+
+                if (this.isGameOver()) {
+                    console.log("Game Over - No valid moves remaining!");
+                    this.gameOver = true;
+                    return;
+                }
+                
+                if (this.shapes.length === 0) {
+                    this.generateShapes();
+                    if (this.isGameOver()) {
+                        console.log("Game Over - New shapes cannot be placed!");
+                        this.gameOver = true;
+                    }
+                }
+            }
+
+            checkLines() {
+                let linesCleared = 0;
+                
+                // Check rows
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    if (this.grid[y].every(cell => cell)) {
+                        this.grid[y].fill(false);
+                        linesCleared++;
+                    }
+                }
+                
+                // Check columns
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    if (this.grid.every(row => row[x])) {
+                        for (let y = 0; y < GRID_SIZE; y++) {
+                            this.grid[y][x] = false;
+                        }
+                        linesCleared++;
+                    }
+                }
+                
+                if (linesCleared > 0) {
+                    const baseScore = linesCleared * 100;
+                    const multiplier = linesCleared;
+                    const totalScore = baseScore * multiplier;
+                    
+                    this.score += totalScore;
+                    if (this.score > this.highScore) {
+                        this.highScore = this.score;
+                        this.saveHighScore();
+                    }
+                    
+                    this.scoreAnimation = {
+                        score: totalScore,
+                        multiplier: multiplier,
+                        y: CANVAS_HEIGHT / 4
+                    };
+                    this.scoreAnimationTime = Date.now();
+                }
+            }
+
+            draw() {
+                // Clear canvas
+                ctx.fillStyle = WHITE;
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+                // Draw scores
+                ctx.font = '36px Arial';
+                ctx.textAlign = 'left';
+                ctx.fillStyle = BLUE;
+                ctx.fillText(`Score: ${this.score}`, 20, SCORE_AREA_HEIGHT/2 + 12);
+                
+                ctx.textAlign = 'right';
+                ctx.fillStyle = PURPLE;
+                ctx.fillText(`High Score: ${this.highScore}`, CANVAS_WIDTH - 20, SCORE_AREA_HEIGHT/2 + 12);
+                
+                // Draw grid
+                for (let y = 0; y < GRID_SIZE; y++) {
+                    for (let x = 0; x < GRID_SIZE; x++) {
+                        ctx.fillStyle = this.grid[y][x] ? BLUE : GRAY;
+                        ctx.fillRect(
+                            x * (CELL_SIZE + MARGIN) + MARGIN,
+                            y * (CELL_SIZE + MARGIN) + MARGIN + SCORE_AREA_HEIGHT,
+                            CELL_SIZE, CELL_SIZE
+                        );
+                    }
+                }
+
+                // Draw available shapes
+                const shapeStartY = GRID_PIXELS + SCORE_AREA_HEIGHT + 50;
+                this.shapes.forEach((shape, i) => {
+                    if (!shape.dragging) {
+                        const shapeX = i * (3 * (SHAPE_CELL_SIZE + SHAPE_MARGIN) + 50) + 50;
+                        const shapeY = shapeStartY;
+                        
+                        shape.pattern.forEach((row, y) => {
+                            row.forEach((cell, x) => {
+                                if (cell) {
+                                    ctx.fillStyle = BLUE;
+                                    ctx.fillRect(
+                                        shapeX + x * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
+                                        shapeY + y * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
+                                        SHAPE_CELL_SIZE, SHAPE_CELL_SIZE
+                                    );
+                                }
+                            });
+                        });
+                    }
+                });
+
+                // Draw dragged shape
+                this.shapes.forEach(shape => {
+                    if (shape.dragging) {
+                        const gridX = Math.floor((mouseX - shape.offset_x) / (CELL_SIZE + MARGIN));
+                        const gridY = Math.floor((mouseY - shape.offset_y - SCORE_AREA_HEIGHT) / (CELL_SIZE + MARGIN));
+                        
+                        const [normX, normY] = this.normalizeShapePosition(shape, gridX, gridY);
+                        shape.pattern.forEach((row, y) => {
+                            row.forEach((cell, x) => {
+                                if (cell) {
+                                    const screenX = normX * (CELL_SIZE + MARGIN) + x * (CELL_SIZE + MARGIN) + MARGIN;
+                                    const screenY = normY * (CELL_SIZE + MARGIN) + y * (CELL_SIZE + MARGIN) + MARGIN + SCORE_AREA_HEIGHT;
+                                    ctx.fillStyle = this.canPlaceShape(shape, gridX, gridY) ? LIGHT_BLUE : RED;
+                                    ctx.fillRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
+                                }
+                            });
+                        });
+                    }
+                });
+
+                // Draw score animation
+                if (this.scoreAnimation) {
+                    if (Date.now() - this.scoreAnimationTime < 700) {
+                        ctx.font = '48px Arial';
+                        ctx.fillStyle = GREEN;
+                        ctx.textAlign = 'center';
+                        ctx.fillText(
+                            `+${this.scoreAnimation.score} (×${this.scoreAnimation.multiplier})`,
+                            CANVAS_WIDTH/2,
+                            this.scoreAnimation.y
+                        );
+                        this.scoreAnimation.y -= 2;
+                    } else {
+                        this.scoreAnimation = null;
+                    }
+                }
+
+                // Draw game over message
+                if (this.gameOver) {
+                    // Semi-transparent overlay
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                    
+                    ctx.font = '72px Arial';
+                    ctx.fillStyle = RED;
+                    ctx.textAlign = 'center';
+                    ctx.fillText('GAME OVER', CANVAS_WIDTH/2, CANVAS_HEIGHT/2);
+                }
+            }
+        }
+
+        // Game setup and mouse handling
+        let game = new Game();
+        let mouseX = 0;
+        let mouseY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (game.gameOver) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            
+            const shapeStartY = GRID_PIXELS + SCORE_AREA_HEIGHT + 50;
+            
+            // Check if clicked on a shape
+            game.shapes.forEach((shape, i) => {
+                if (!shape.dragging) {
+                    const shapeX = i * (3 * (SHAPE_CELL_SIZE + SHAPE_MARGIN) + 50) + 50;
+                    const shapeY = shapeStartY;
+                    
+                    const shapeWidth = shape.pattern[0].length * (SHAPE_CELL_SIZE + SHAPE_MARGIN);
+                    const shapeHeight = shape.pattern.length * (SHAPE_CELL_SIZE + SHAPE_MARGIN);
+                    
+                    if (mouseX >= shapeX && mouseX <= shapeX + shapeWidth &&
+                        mouseY >= shapeY && mouseY <= shapeY + shapeHeight) {
+                        shape.dragging = true;
+                        shape.offset_x = mouseX - shapeX;
+                        shape.offset_y = mouseY - shapeY;
+                    }
+                }
+            });
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (game.gameOver) return;
+            
+            game.shapes.forEach(shape => {
+                if (shape.dragging) {
+                    const gridX = Math.floor((mouseX - shape.offset_x) / (CELL_SIZE + MARGIN));
+                    const gridY = Math.floor((mouseY - shape.offset_y - SCORE_AREA_HEIGHT) / (CELL_SIZE + MARGIN));
+                    
+                    if (game.canPlaceShape(shape, gridX, gridY)) {
+                        game.placeShape(shape, gridX, gridY);
+                    }
+                    shape.dragging = false;
+                }
+            });
+        });
+
+        // Game loop
+        function gameLoop() {
+            game.draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        gameLoop();
+    </script>
+</body>
+</html>
