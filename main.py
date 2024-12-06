@@ -7,22 +7,22 @@ import asyncio
 pygame.init()
 pygame.mixer.init()
 
-# Constants
+
 GRID_SIZE = 10
 CELL_SIZE = 50
 MARGIN = 2
 SHAPE_CELL_SIZE = 30
 SHAPE_MARGIN = 2
-SCORE_AREA_HEIGHT = 100  # Extra space at top for scores
+SCORE_AREA_HEIGHT = 100  
 
-# Window calculation
+
 GRID_PIXELS = GRID_SIZE * (CELL_SIZE + MARGIN) + MARGIN
 WINDOW_WIDTH = GRID_PIXELS
 WINDOW_HEIGHT = SCORE_AREA_HEIGHT + GRID_PIXELS + 200
 SCREEN = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Grid Block Game")
 
-# Colors
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GRAY = (128, 128, 128)
@@ -32,64 +32,64 @@ RED = (255, 100, 100)
 GREEN = (100, 255, 100)
 PURPLE = (200, 100, 255)
 
-# Block colors for shapes
+
 BLOCK_COLORS = [
-    (0, 100, 255),   # BLUE
-    (210, 45, 45),   # REDBLOCK
-    (237, 174, 18),  # YELLOWBLOCK
-    (47, 207, 65)    # GREENBLOCK
+    (0, 100, 255),   
+    (210, 45, 45),   
+    (237, 174, 18),  
+    (47, 207, 65)    
 ]
 
-# Load sounds
+
 place_sound = pygame.mixer.Sound('build/place.mp3')
 hover_sound = pygame.mixer.Sound('build/hovergrid.mp3')
 cheer_sound = pygame.mixer.Sound('build/cheer.mp3')
 highscore_sound = pygame.mixer.Sound('build/highscore.mp3')
 score_sound = pygame.mixer.Sound('build/score.mp3')
 
-# Shape patterns
+
 SHAPE_PATTERNS = [
-    # Single cell
+    
     [[False, False, False],
      [False, True, False],
      [False, False, False]],
     
-    # 3x3 solid block
+    
     [[True, True, True],
      [True, True, True],
      [True, True, True]],
      
-    # L shape
+    
     [[True, False, False],
      [True, False, False],
      [True, True, True]],
      
-    # Modified L shape
+    
     [[True, False, False],
      [True, True, False],
      [True, False, False]],
      
-    # Right edge
+    
     [[False, False, False],
      [True, True, False],
      [False, False, False]],
      
-    # Diagonal 2
+    
     [[True, True, False],
      [False, True, True],
      [False, False, False]],
      
-    # Corner shape
+    
     [[False, False, False],
      [True, False, False],
      [True, True, False]],
      
-    # Middle horizontal line
+    
     [[False, False, False],
      [True, True, True],
      [False, False, False]],
      
-    # T shape
+    
     [[True, True, False],
      [True, True, True],
      [False, False, False]]
@@ -113,7 +113,7 @@ class Shape:
 
 class Game:
     def __init__(self):
-        # Grid now stores either False or a (r,g,b) color
+        
         self.grid = [[False]*GRID_SIZE for _ in range(GRID_SIZE)]
         self.shapes = []
         self.score = 0
@@ -122,7 +122,7 @@ class Game:
         self.score_animation_time = 0
         self.game_over = False
 
-        # Hover logic
+        
         self.last_hover_grid_x = None
         self.last_hover_grid_y = None
         self.currently_hovering_grid = False
@@ -154,7 +154,7 @@ class Game:
 
     def is_game_over(self):
         if len(self.shapes) == 0:
-            # No shapes means we wait until generate_shapes()
+            
             return False
 
         def can_place_at_position(shape, x, y):
@@ -169,7 +169,7 @@ class Game:
                             return False
             return True
 
-        # Check if all shapes fail to place
+        
         for shape in self.shapes:
             can_place_this_shape = False
             for yy in range(GRID_SIZE):
@@ -180,9 +180,9 @@ class Game:
                 if can_place_this_shape:
                     break
             if can_place_this_shape:
-                # Found a shape that can be placed, not game over
+                
                 return False
-        # No shape can be placed
+        
         return True
 
     def can_place_shape(self, shape, grid_x, grid_y):
@@ -246,14 +246,14 @@ class Game:
     def check_lines(self):
         lines_cleared = 0
         
-        # Check rows
+        
         for y in range(GRID_SIZE):
             if all(self.grid[y][x] != False for x in range(GRID_SIZE)):
                 for x in range(GRID_SIZE):
                     self.grid[y][x] = False
                 lines_cleared += 1
         
-        # Check columns
+        
         for x in range(GRID_SIZE):
             if all(self.grid[y][x] != False for y in range(GRID_SIZE)):
                 for y in range(GRID_SIZE):
@@ -278,7 +278,7 @@ class Game:
             if multiplier > 1:
                 cheer_sound.play()
             else:
-                # single line/column clear
+                
                 if not new_highscore:
                     score_sound.play()
 
@@ -292,7 +292,7 @@ class Game:
     def draw(self):
         SCREEN.fill(WHITE)
 
-        # Draw scores at top
+        
         font = pygame.font.SysFont(None, 36)
         high_score_text = font.render(f'High Score: {self.high_score}', True, PURPLE)
         score_text = font.render(f'Score: {self.score}', True, BLUE)
@@ -303,7 +303,7 @@ class Game:
         SCREEN.blit(high_score_text, (start_x, 10))
         SCREEN.blit(score_text, (start_x + high_score_rect.width + 20, 10))
 
-        # Draw grid shifted down by SCORE_AREA_HEIGHT
+        
         for y in range(GRID_SIZE):
             for x in range(GRID_SIZE):
                 cell_val = self.grid[y][x]
@@ -315,7 +315,7 @@ class Game:
                 )
                 pygame.draw.rect(SCREEN, cell_color, rect)
 
-        # Draw available shapes below the grid
+        
         shape_start_y = SCORE_AREA_HEIGHT + GRID_PIXELS + 50
         for i, shape in enumerate(self.shapes):
             if not shape.dragging:
@@ -331,7 +331,7 @@ class Game:
                             )
                             pygame.draw.rect(SCREEN, shape.color, rect)
 
-        # Handle hover sound and draw dragged shapes
+        
         hover_sound_should_play = False
         for shape in self.shapes:
             if shape.dragging:
@@ -350,7 +350,7 @@ class Game:
                             color = LIGHT_BLUE if can_place else RED
                             pygame.draw.rect(SCREEN, color, rect)
 
-                # Check hover logic
+                
                 in_grid = (0 <= grid_x < GRID_SIZE and 0 <= grid_y < GRID_SIZE)
                 if in_grid:
                     if (not self.currently_hovering_grid or 
@@ -368,7 +368,7 @@ class Game:
         if hover_sound_should_play:
             hover_sound.play()
 
-        # Draw score animation
+        
         if self.score_animation:
             current_time = pygame.time.get_ticks()
             if current_time - self.score_animation_time < 700:
@@ -383,7 +383,7 @@ class Game:
             else:
                 self.score_animation = None
 
-        # Game over overlay
+        
         if self.game_over:
             font = pygame.font.SysFont(None, 72)
             game_over_text = font.render('GAME OVER', True, RED)
