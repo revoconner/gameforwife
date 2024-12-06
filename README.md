@@ -5,3 +5,5 @@ Play here: https://revoconner.github.io/gameforwife/
 
 ### Changelog
 1. Added sound files for hover on grid, place on grid, high score, score, multiplier used
+2. Game over logic fixed
+3. added random colors for blocks (no impact on games)
