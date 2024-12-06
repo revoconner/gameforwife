@@ -10,6 +10,8 @@
         display: block;
         touch-action: none;
     }
+
+
     body {
         background-color: #1a1a1a;
         margin: 0;
@@ -22,6 +24,11 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <audio id="placeSound" src="place.mp3"></audio>
+    <audio id="hoverSound" src="hovergrid.mp3"></audio>
+    <audio id="cheerSound" src="cheer.mp3"></audio>
+    <audio id="highscoreSound" src="highscore.mp3"></audio>
+    <audio id="scoreSound" src="score.mp3"></audio>
     <script>
         // Constants and variables
         const BASE_GRID_SIZE = 10;
@@ -50,6 +57,18 @@
         // Setup canvas
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+
+        // Audio elements
+        const placeSound = document.getElementById('placeSound');
+        const hoverSound = document.getElementById('hoverSound');
+        const cheerSound = document.getElementById('cheerSound');
+        const highscoreSound = document.getElementById('highscoreSound');
+        const scoreSound = document.getElementById('scoreSound');
+
+        // Track hover sound conditions
+        let lastHoverGridX = null;
+        let lastHoverGridY = null;
+        let currentlyHoveringGrid = false;
 
         // Scale factors based on screen size
         function calculateScaling() {
@@ -223,13 +242,11 @@
                         if (canPlaceThisShape) break;
                     }
                     if (canPlaceThisShape) {
-                        return false;
+                        return false; 
                     }
                 }
-                return true;
+                return true; 
             }
-
-
 
             canPlaceShape(shape, gridX, gridY) {
                 [gridX, gridY] = this.normalizeShapePosition(shape, gridX, gridY);
@@ -286,12 +303,13 @@
                         }
                     }
                 }
+
+                placeSound.play();
                 
                 this.checkLines();
                 this.shapes.splice(this.shapes.indexOf(shape), 1);
 
                 if (this.isGameOver()) {
-                    console.log("Game Over - No valid moves remaining!");
                     this.gameOver = true;
                     return;
                 }
@@ -299,7 +317,6 @@
                 if (this.shapes.length === 0) {
                     this.generateShapes();
                     if (this.isGameOver()) {
-                        console.log("Game Over - New shapes cannot be placed!");
                         this.gameOver = true;
                     }
                 }
@@ -335,8 +352,15 @@
                     if (this.score > this.highScore) {
                         this.highScore = this.score;
                         this.saveHighScore();
+                        highscoreSound.play();
                     }
                     
+                    if (multiplier > 1) {
+                        cheerSound.play();
+                    } else {
+                        scoreSound.play();
+                    }
+
                     this.scoreAnimation = {
                         score: totalScore,
                         multiplier: multiplier,
@@ -351,19 +375,15 @@
                 ctx.fillStyle = WHITE;
                 ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-                // Calculate font size based on canvas width
                 const fontSize = Math.min(36, Math.floor(CANVAS_WIDTH / 15));
                 ctx.font = `${fontSize}px Arial`;
 
-                // Draw scores with adjusted positioning
                 const scoreY = SCORE_AREA_HEIGHT/2 + fontSize/3;
                 
-                // Draw Score on top
                 ctx.textAlign = 'center';
                 ctx.fillStyle = BLUE;
                 ctx.fillText(`Score: ${this.score}`, CANVAS_WIDTH/2, scoreY - fontSize/2);
                 
-                // Draw High Score below
                 ctx.fillStyle = PURPLE;
                 ctx.fillText(`High Score: ${this.highScore}`, CANVAS_WIDTH/2, scoreY + fontSize/2);
                 
@@ -379,7 +399,6 @@
                     }
                 }
 
-                // Draw available shapes
                 const shapeStartY = GRID_PIXELS + SCORE_AREA_HEIGHT + 50;
                 this.shapes.forEach((shape, i) => {
                     if (!shape.dragging) {
@@ -401,25 +420,44 @@
                     }
                 });
 
-                // Draw dragged shape
+                // Draw dragged shape and check hover sound conditions
+                let hoverSoundShouldPlay = false;
                 this.shapes.forEach(shape => {
                     if (shape.dragging) {
                         const gridX = Math.floor((mouseX - shape.offset_x) / (CELL_SIZE + MARGIN));
                         const gridY = Math.floor((mouseY - shape.offset_y - SCORE_AREA_HEIGHT) / (CELL_SIZE + MARGIN));
                         
+                        const inGrid = gridX >= 0 && gridX < GRID_SIZE && gridY >= 0 && gridY < GRID_SIZE;
                         const [normX, normY] = this.normalizeShapePosition(shape, gridX, gridY);
-                        shape.pattern.forEach((row, y) => {
-                            row.forEach((cell, x) => {
+                        shape.pattern.forEach((row, yy) => {
+                            row.forEach((cell, xx) => {
                                 if (cell) {
-                                    const screenX = normX * (CELL_SIZE + MARGIN) + x * (CELL_SIZE + MARGIN) + MARGIN;
-                                    const screenY = normY * (CELL_SIZE + MARGIN) + y * (CELL_SIZE + MARGIN) + MARGIN + SCORE_AREA_HEIGHT;
+                                    const screenX = normX * (CELL_SIZE + MARGIN) + xx * (CELL_SIZE + MARGIN) + MARGIN;
+                                    const screenY = normY * (CELL_SIZE + MARGIN) + yy * (CELL_SIZE + MARGIN) + MARGIN + SCORE_AREA_HEIGHT;
                                     ctx.fillStyle = this.canPlaceShape(shape, gridX, gridY) ? LIGHT_BLUE : RED;
                                     ctx.fillRect(screenX, screenY, CELL_SIZE, CELL_SIZE);
                                 }
                             });
                         });
+
+                        if (inGrid && shape.dragging) {
+                            if (!currentlyHoveringGrid || gridX !== lastHoverGridX || gridY !== lastHoverGridY) {
+                                hoverSoundShouldPlay = true;
+                                currentlyHoveringGrid = true;
+                                lastHoverGridX = gridX;
+                                lastHoverGridY = gridY;
+                            }
+                        } else {
+                            currentlyHoveringGrid = false;
+                            lastHoverGridX = null;
+                            lastHoverGridY = null;
+                        }
                     }
                 });
+
+                if (hoverSoundShouldPlay) {
+                    hoverSound.play();
+                }
 
                 // Draw score animation
                 if (this.scoreAnimation) {
@@ -438,9 +476,7 @@
                     }
                 }
 
-                // Draw game over message
                 if (this.gameOver) {
-                    // Semi-transparent overlay
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
                     
@@ -452,7 +488,6 @@
             }
         }
 
-        // Event handling for both mouse and touch
         let activePointer = null;
 
         function getCanvasCoordinates(e) {
@@ -498,9 +533,7 @@
             e.preventDefault();
             if (!activePointer) return;
             
-            // Check if this is the same touch that started the drag
             if (e.touches && e.touches.length > 0) {
-                // Find the touch with the matching identifier
                 const touch = Array.from(e.touches).find(t => t.identifier === activePointer);
                 if (!touch) return;
                 
@@ -533,7 +566,6 @@
             activePointer = null;
         }
 
-        // Add both mouse and touch event listeners
         canvas.addEventListener('mousedown', handleStart);
         canvas.addEventListener('mousemove', handleMove);
         canvas.addEventListener('mouseup', handleEnd);
@@ -544,13 +576,11 @@
         canvas.addEventListener('touchend', handleEnd);
         canvas.addEventListener('touchcancel', handleEnd);
 
-        // Game loop
         function gameLoop() {
             game.draw();
             requestAnimationFrame(gameLoop);
         }
 
-        // Start the game
         let game = new Game();
         gameLoop();
     </script>
