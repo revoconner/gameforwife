@@ -54,6 +54,14 @@
         const GREEN = '#64FF64';
         const PURPLE = '#C864FF';
 
+        // New block colors
+        const BLOCK_COLORS = [
+            '#0064FF', // BLUE
+            '#d22d2d', // REDBLOCK
+            '#edae12', // YELLOWBLOCK
+            '#2fcf41'  // GREENBLOCK
+        ];
+
         // Setup canvas
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -153,11 +161,12 @@
         ];
 
         class Shape {
-            constructor(pattern) {
+            constructor(pattern, color) {
                 this.pattern = pattern;
                 this.dragging = false;
                 this.offset_x = 0;
                 this.offset_y = 0;
+                this.color = color;
             }
 
             rotate() {
@@ -174,6 +183,7 @@
 
         class Game {
             constructor() {
+                // Store either false or a color string in the grid
                 this.grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(false));
                 this.shapes = [];
                 this.score = 0;
@@ -277,7 +287,8 @@
                 for (let i = 0; i < 3; i++) {
                     const patternIdx = weightedIndices[Math.floor(Math.random() * weightedIndices.length)];
                     const pattern = SHAPE_PATTERNS[patternIdx].map(row => [...row]);
-                    const shape = new Shape(pattern);
+                    const randomColor = BLOCK_COLORS[Math.floor(Math.random() * BLOCK_COLORS.length)];
+                    const shape = new Shape(pattern, randomColor);
                     if (patternIdx > 1) {
                         const rotations = Math.floor(Math.random() * 4);
                         for (let j = 0; j < rotations; j++) {
@@ -299,7 +310,7 @@
                 for (let y = 0; y < pattern.length; y++) {
                     for (let x = 0; x < pattern[y].length; x++) {
                         if (pattern[y][x]) {
-                            this.grid[gridY + y][gridX + x] = true;
+                            this.grid[gridY + y][gridX + x] = shape.color;
                         }
                     }
                 }
@@ -327,7 +338,7 @@
                 
                 // Check rows
                 for (let y = 0; y < GRID_SIZE; y++) {
-                    if (this.grid[y].every(cell => cell)) {
+                    if (this.grid[y].every(cell => cell !== false)) {
                         this.grid[y].fill(false);
                         linesCleared++;
                     }
@@ -335,7 +346,14 @@
                 
                 // Check columns
                 for (let x = 0; x < GRID_SIZE; x++) {
-                    if (this.grid.every(row => row[x])) {
+                    let columnFull = true;
+                    for (let y = 0; y < GRID_SIZE; y++) {
+                        if (this.grid[y][x] === false) {
+                            columnFull = false;
+                            break;
+                        }
+                    }
+                    if (columnFull) {
                         for (let y = 0; y < GRID_SIZE; y++) {
                             this.grid[y][x] = false;
                         }
@@ -390,7 +408,8 @@
                 // Draw grid
                 for (let y = 0; y < GRID_SIZE; y++) {
                     for (let x = 0; x < GRID_SIZE; x++) {
-                        ctx.fillStyle = this.grid[y][x] ? BLUE : GRAY;
+                        const cell = this.grid[y][x];
+                        ctx.fillStyle = cell ? cell : GRAY;
                         ctx.fillRect(
                             x * (CELL_SIZE + MARGIN) + MARGIN,
                             y * (CELL_SIZE + MARGIN) + MARGIN + SCORE_AREA_HEIGHT,
@@ -405,13 +424,13 @@
                         const shapeX = i * (3 * (SHAPE_CELL_SIZE + SHAPE_MARGIN) + 50) + 50;
                         const shapeY = shapeStartY;
                         
-                        shape.pattern.forEach((row, y) => {
-                            row.forEach((cell, x) => {
+                        shape.pattern.forEach((row, yy) => {
+                            row.forEach((cell, xx) => {
                                 if (cell) {
-                                    ctx.fillStyle = BLUE;
+                                    ctx.fillStyle = shape.color;
                                     ctx.fillRect(
-                                        shapeX + x * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
-                                        shapeY + y * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
+                                        shapeX + xx * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
+                                        shapeY + yy * (SHAPE_CELL_SIZE + SHAPE_MARGIN),
                                         SHAPE_CELL_SIZE, SHAPE_CELL_SIZE
                                     );
                                 }
