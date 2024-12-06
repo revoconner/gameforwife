@@ -189,6 +189,10 @@
             }
 
             isGameOver() {
+                if (this.shapes.length === 0) {
+                    return false; 
+                }
+
                 const canPlaceAtPosition = (shape, x, y) => {
                     const pattern = shape.pattern;
                     for (let py = 0; py < pattern.length; py++) {
@@ -208,20 +212,24 @@
                 };
 
                 for (const shape of this.shapes) {
-                    let canPlace = false;
+                    let canPlaceThisShape = false;
                     for (let y = 0; y < GRID_SIZE; y++) {
                         for (let x = 0; x < GRID_SIZE; x++) {
                             if (canPlaceAtPosition(shape, x, y)) {
-                                canPlace = true;
+                                canPlaceThisShape = true;
                                 break;
                             }
                         }
-                        if (canPlace) break;
+                        if (canPlaceThisShape) break;
                     }
-                    if (!canPlace) return true;
+                    if (canPlaceThisShape) {
+                        return false;
+                    }
                 }
-                return false;
+                return true;
             }
+
+
 
             canPlaceShape(shape, gridX, gridY) {
                 [gridX, gridY] = this.normalizeShapePosition(shape, gridX, gridY);
